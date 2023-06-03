@@ -1,13 +1,18 @@
-import org.apache.spark.sql.functions.{when, _}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, SparkSession, functions}
-
+import org.elasticsearch.spark.sql._
 
 object Main {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()
-      .appName("SimpleStreamingJob")
+      .appName("SimpleStreamingJob-ELK")
       .master("local[*]")
+      .config("spark.es.nodes","localhost")
+      .config("spark.es.port","9200")
+      .config("spark.es.index.auto.create","true")
+      .config("spark.es.nodes.wan.only","true")
+
       .getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
     val schema = StructType(Seq(
@@ -179,25 +184,27 @@ object Main {
     ))
 
 
-
-    def writeAvro(df: DataFrame, batchId: Long): Unit = {
+    val batchDFTimestamp = result.withColumn("batch_timestamp", current_timestamp()) //dummy-timestamp
+    print("STAGE")
+    print(current_timestamp())
+    def writeElastic(df: DataFrame, batchId: Long): Unit = {
       //    val currentTime = current_timestamp()
       //      val batchDFTimestamp = df.withColumn("batch_timestamp",currentTime)
       df.write
-        .format("avro")
+        .format("org.elasticsearch.spark.sql")
         //.format("console")
         .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss'")
-        .partitionBy("batch_timestamp") // by different column date : yyyy-mm-dd srch_co
-        .option("path", "/home/xl3f/Desktop/ScalaSimpleStreams/out/production/avroBatches")
-        .mode("overwrite")
+        .option("es.resource", "elk-spark-timestamp")
+        //.partitionBy("batch_timestamp") // by different column date : yyyy-mm-dd srch_co
+        //.option("path", "/home/xl3f/Desktop/ScalaSimpleStreams/out/production/avroBatches")
+        .mode("append")
         .save()
     }
 
 
-    val query = result.writeStream
+    val query = batchDFTimestamp.writeStream
       .outputMode("complete")
-      .format("avro")
-      .foreachBatch(writeAvro _)
+      .foreachBatch(writeElastic _)
       .start()
     query.processAllAvailable()
     query.stop()
