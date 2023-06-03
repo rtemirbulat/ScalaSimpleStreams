@@ -9,7 +9,7 @@ object Main {
       .appName("SimpleStreamingJob")
       .master("local[*]")
       .getOrCreate()
-    //spark.sparkContext.setLogLevel("ERROR")
+    spark.sparkContext.setLogLevel("ERROR")
     val schema = StructType(Seq(
       StructField("id", LongType),
       StructField("date_time", StringType),
@@ -23,8 +23,8 @@ object Main {
       StructField("is_mobile", IntegerType),
       StructField("is_package", IntegerType),
       StructField("channel", IntegerType),
-      StructField("srch_ci", StringType),
-      StructField("srch_co", StringType),
+      StructField("srch_ci", StringType), // cast to Date
+      StructField("srch_co", StringType), //cast to Date
       StructField("srch_adults_cnt", IntegerType),
       StructField("srch_children_cnt", IntegerType),
       StructField("srch_rm_cnt", IntegerType),
@@ -50,7 +50,7 @@ object Main {
 
     def createNewStayColumn(df: DataFrame): DataFrame = {
       val duration = df.withColumn("stay",
-        datediff(col("srch_co"), col("srch_ci")))
+        datediff(col("srch_co"), col("srch_ci"))) // 30, 31 -> 1
         .filter(col("stay").isNotNull)
       return duration
     }
@@ -63,7 +63,7 @@ object Main {
       val filteredNewDf1 = filterIdAndDates(newDf)
 
       val joined = filteredNewDf1
-        .join(filteredNewDf2, Seq("hotel_id", "srch_ci"), "inner")
+        .join(filteredNewDf2, Seq("hotel_id", "srch_ci"), "inner") // better left
         .select(filteredNewDf1.col("*"), filteredNewDf2.col("address"), filteredNewDf2.col("avg_tmpr_c")
           .alias("weather_avg_tmpr_c"))
         .filter(col("weather_avg_tmpr_c") > 0)
@@ -78,7 +78,7 @@ object Main {
       val hotelPreferences = batchDFwithTimestamp
         .groupBy(
           "hotel_id","batch_timestamp"
-          ) // by hotel id only
+        ) // by hotel id only
         .agg(
           count("stay").alias("total_count"),
           count(when(stayType === "Erroneous data", true)).alias("erroneous_data_count"),
@@ -160,7 +160,7 @@ object Main {
     val renamedStreaming = aggregatedStream.select(renamedDfStream: _*)
 
     val joinedAll = renamedStreaming.join(broadcast(renamedHistorical), col("2016_hotel_id") === col("2017_hotel_id")
-      , "inner")
+      , "inner") //Utest to count data before and after joins
       .select(col("2016_hotel_id").alias("hotel_id"),
         (col("2016_short_stay_count") + col("2017_short_stay_count")).alias("short_stay"),
         (col("2016_standard_stay_count") + col("2017_standard_stay_count")).alias("standard_stay"),
@@ -172,22 +172,22 @@ object Main {
 
     val result = joinedAll.withColumn("most_popular_stay_type",greatest(
       col("short_stay"),
-        col ("standard_stay"),
-        col ("standard_extended_stay"),
-        col ("long_stay"),
-        col ("erroneous_data_cnt")
+      col ("standard_stay"),
+      col ("standard_extended_stay"),
+      col ("long_stay"),
+      col ("erroneous_data_cnt")
     ))
 
 
 
     def writeAvro(df: DataFrame, batchId: Long): Unit = {
-  //    val currentTime = current_timestamp()
-//      val batchDFTimestamp = df.withColumn("batch_timestamp",currentTime)
+      //    val currentTime = current_timestamp()
+      //      val batchDFTimestamp = df.withColumn("batch_timestamp",currentTime)
       df.write
         .format("avro")
         //.format("console")
         .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss'")
-        .partitionBy("batch_timestamp")
+        .partitionBy("batch_timestamp") // by different column date : yyyy-mm-dd srch_co
         .option("path", "/home/xl3f/Desktop/ScalaSimpleStreams/out/production/avroBatches")
         .mode("overwrite")
         .save()

@@ -29,6 +29,11 @@
             <artifactId>spark-avro_2.13</artifactId>
             <version>3.3.2</version>
         </dependency>
+        <dependency>
+            <groupId>org.elasticsearch</groupId>
+            <artifactId>elasticsearch-spark-30_2.12</artifactId>
+            <version>8.6.2</version>
+        </dependency>
     </dependencies>
 
 </project>
